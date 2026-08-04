@@ -47,8 +47,9 @@ problema que ele resolve já é palpável.
 
 **Passos 3 em diante:** instruções na pasta de cada um.
 
-Cada passo tem um `LEIA.md` com o que ele ensina, o que fazer, o que quebrar e o critério objetivo
-de "terminei".
+Cada passo tem um `README.md` próprio com o que ele ensina, o que fazer, o que quebrar e o critério
+objetivo de "terminei". Abrindo a pasta do passo aqui no GitHub, ele aparece renderizado logo abaixo
+da lista de arquivos.
 
 ---
 
