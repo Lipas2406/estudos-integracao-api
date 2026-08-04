@@ -78,8 +78,14 @@ resultado é uma tela que mostra uma mensagem de erro e uma lista de resultados 
 que ninguém digitou e que a modelagem permitiu. Uma situação por vez elimina a categoria inteira,
 em vez de corrigir um caso de cada vez.
 
+**A última resposta a chegar não é a última que foi pedida.** Trocar de filtro antes de a primeira
+resposta voltar faz a antiga sobrescrever a nova — e a tela passa a exibir um título de um estado com
+a lista de outro. É o mesmo raciocínio que, do lado do servidor, faz dois usuários receberem o mesmo
+número de registro. Concorrência não é assunto de banco nem de front-end: é o que acontece sempre que
+algo espera.
+
 ---
 
 ## Estado
 
-Em construção, um passo por vez. Passos 1, 2 e 3 prontos.
+Em construção, um passo por vez. Passos 1 a 4 prontos.

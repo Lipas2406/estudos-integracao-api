@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Passo 4 — Condição de corrida</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 16px;
+           line-height: 1.5; color: #111; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { color: #666; margin-top: 0; }
+    .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 20px 0 4px; }
+    button { font-size: 14px; padding: 9px 14px; cursor: pointer; border: 1px solid #333;
+             background: #fff; color: #111; border-radius: 6px; }
+    button:hover { background: #f4f4f5; }
+    button.ativo { background: #111; color: #fff; }
+    .lento { border-color: #b45309; color: #b45309; }
+    .lento.ativo { background: #b45309; border-color: #b45309; color: #fff; }
+    .demo { background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 600; }
+    .demo:hover { background: #1e40af; }
+    .opcoes { font-size: 13px; color: #444; margin: 10px 0 0; }
+    .par { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    @media (max-width: 780px) { .par { grid-template-columns: 1fr; } }
+    .lado { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+    .lado.ruim { border-color: #f0b4b4; background: #fffafa; }
+    .lado.bom  { border-color: #b4dcc0; background: #fafffb; }
+    .rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+              font-weight: 700; margin-bottom: 10px; }
+    .ruim .rotulo { color: #b91c1c; }
+    .bom .rotulo  { color: #15803d; }
+    .tela { border: 1px dashed #bbb; border-radius: 6px; padding: 12px; min-height: 150px;
+            background: #fff; }
+    .tela h3 { margin: 0 0 2px; font-size: 16px; }
+    .tela .qtd { font-size: 13px; color: #666; margin: 0 0 8px; }
+    ul { margin: 0; padding-left: 20px; font-size: 14px; }
+    .carregando { color: #666; font-style: italic; }
+    .alerta { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px;
+              padding: 10px; font-size: 13px; margin-top: 10px; }
+    .ok-nota { background: #dcfce7; border: 1px solid #86efac; border-radius: 6px;
+               padding: 10px; font-size: 13px; margin-top: 10px; }
+    code { background: #f4f4f5; padding: 2px 5px; border-radius: 4px; font-size: 13px; }
+    .log { font-size: 12px; color: #555; margin-top: 10px; }
+    .log div { font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+
+<div id="raiz">Carregando o React...</div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const BASE = 'https://servicodados.ibge.gov.br/api/v1/localidades/estados';
+
+// O atraso é declarado aqui, e é artificial. Os tempos reais desta API
+// ficam todos entre 0,10s e 0,18s — perto demais para a corrida ser
+// reproduzível. Ver o README: o mecanismo do bug é real, a lentidão é
+// de laboratório.
+const ESTADOS = [
+  { uf:'MG', nome:'Minas Gerais', atrasoMs: 2500 },
+  { uf:'RR', nome:'Roraima',      atrasoMs: 0 },
+  { uf:'AC', nome:'Acre',         atrasoMs: 0 },
+  { uf:'BA', nome:'Bahia',        atrasoMs: 1200 },
+];
+
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+async function buscarMunicipios(estado, simularLentidao) {
+  if (simularLentidao && estado.atrasoMs) await esperar(estado.atrasoMs);
+  const resposta = await fetch(`${BASE}/${estado.uf}/municipios`);
+  if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+  return resposta.json();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  JEITO A — sem defesa nenhuma.
+//  Toda resposta que chega é escrita na tela, independentemente de
+//  ainda ser a resposta que alguém está esperando.
+// ══════════════════════════════════════════════════════════════════
+function PainelIngenuo({ estado, simular, aoRegistrar }) {
+  const [carregando, setCarregando] = useState(false);
+  const [dados, setDados] = useState(null);
+
+  useEffect(() => {
+    if (!estado) return;
+    setCarregando(true);
+    buscarMunicipios(estado, simular).then(lista => {
+      // Nada aqui pergunta "esta resposta ainda interessa?".
+      setDados({ uf: estado.uf, lista });
+      setCarregando(false);
+      aoRegistrar(`chegou ${estado.uf} (${lista.length}) -> escreveu na tela`);
+    });
+  }, [estado, simular]);
+
+  const mentindo = dados && estado && dados.uf !== estado.uf;
+
+  return (
+    <div className="lado ruim">
+      <div className="rotulo">Jeito A — sem defesa</div>
+      <div className="tela">
+        <h3>{estado ? `${estado.nome} (${estado.uf})` : '—'}</h3>
+        {carregando && <p className="carregando">Carregando municípios...</p>}
+        {dados && (
+          <>
+            <p className="qtd">{dados.lista.length} municípios</p>
+            <ul>{dados.lista.slice(0, 4).map(m => <li key={m.id}>{m.nome}</li>)}</ul>
+          </>
+        )}
+      </div>
+      {mentindo && (
+        <div className="alerta">
+          <strong>A tela está mentindo.</strong> O título diz <code>{estado.uf}</code> e a lista
+          abaixo é de <code>{dados.uf}</code>. Chegou uma resposta velha depois da nova, e ela
+          sobrescreveu tudo. Nada no código percebeu.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  JEITO B — o cleanup do useEffect.
+//  Quando `estado` muda, o React roda a função devolvida pelo efeito
+//  ANTERIOR antes de rodar o novo. É ali que a resposta velha é
+//  marcada como não mais desejada.
+// ══════════════════════════════════════════════════════════════════
+function PainelComCleanup({ estado, simular, aoRegistrar }) {
+  const [carregando, setCarregando] = useState(false);
+  const [dados, setDados] = useState(null);
+
+  useEffect(() => {
+    if (!estado) return;
+    let atual = true;               // esta busca ainda é a que interessa?
+    setCarregando(true);
+    buscarMunicipios(estado, simular).then(lista => {
+      if (!atual) {                 // chegou tarde: outra busca já começou
+        aoRegistrar(`chegou ${estado.uf} (${lista.length}) -> DESCARTADO`);
+        return;
+      }
+      setDados({ uf: estado.uf, lista });
+      setCarregando(false);
+    });
+    return () => { atual = false; };   // <- o cleanup
+  }, [estado, simular]);
+
+  const mentindo = dados && estado && dados.uf !== estado.uf;
+
+  return (
+    <div className="lado bom">
+      <div className="rotulo">Jeito B — com cleanup</div>
+      <div className="tela">
+        <h3>{estado ? `${estado.nome} (${estado.uf})` : '—'}</h3>
+        {carregando && <p className="carregando">Carregando municípios...</p>}
+        {dados && (
+          <>
+            <p className="qtd">{dados.lista.length} municípios</p>
+            <ul>{dados.lista.slice(0, 4).map(m => <li key={m.id}>{m.nome}</li>)}</ul>
+          </>
+        )}
+      </div>
+      {!mentindo && dados && (
+        <div className="ok-nota">
+          Título e lista são do mesmo estado. A resposta atrasada chegou, foi reconhecida como
+          obsoleta e descartada — veja o registro abaixo.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [estado, setEstado] = useState(null);
+  const [simular, setSimular] = useState(true);
+  const [registro, setRegistro] = useState([]);
+  const contador = useRef(0);
+
+  const registrar = texto => setRegistro(r => [...r.slice(-5), `${++contador.current}. ${texto}`]);
+
+  return (
+    <>
+      <h1>Passo 4 — Condição de corrida</h1>
+      <p className="sub">
+        Use o botão azul, ou faça na mão: clique em <strong>Minas Gerais</strong> e, em menos de
+        2 segundos, em <strong>Roraima</strong>. Depois espere ~2s e olhe o lado esquerdo.
+      </p>
+
+      <div className="barra">
+        {ESTADOS.map(e => (
+          <button key={e.uf}
+                  className={`${estado?.uf === e.uf ? 'ativo' : ''} ${e.atrasoMs ? 'lento' : ''}`}
+                  onClick={() => { setEstado(e); }}>
+            {e.nome}{e.atrasoMs ? ` (lento: +${e.atrasoMs/1000}s)` : ''}
+          </button>
+        ))}
+      </div>
+
+      <div className="barra">
+        <button className="demo" onClick={async () => {
+          setRegistro([]);
+          // Zera antes: se MG já estivesse selecionado, pedir MG de novo não
+          // mudaria nada e o efeito não dispararia — a corrida nem começaria.
+          setEstado(null);
+          await esperar(60);
+          setEstado(ESTADOS[0]);          // Minas Gerais, lento
+          await esperar(300);             // troca antes de a primeira chegar
+          setEstado(ESTADOS[1]);          // Roraima, rápido
+        }}>
+          ▶ Demonstrar a corrida (MG e, 300ms depois, RR)
+        </button>
+      </div>
+
+      <p className="opcoes">
+        <label>
+          <input type="checkbox" checked={simular}
+                 onChange={ev => { setSimular(ev.target.checked); setRegistro([]); }} />
+          {' '}Simular servidor lento nos estados marcados
+        </label>
+        {!simular && ' — agora os tempos são os reais da API. Tente reproduzir o bug assim.'}
+      </p>
+
+      <div className="par">
+        <PainelIngenuo    estado={estado} simular={simular} aoRegistrar={registrar} />
+        <PainelComCleanup estado={estado} simular={simular} aoRegistrar={registrar} />
+      </div>
+
+      {registro.length > 0 && (
+        <div className="log">
+          <b>Registro de chegada das respostas</b>
+          {registro.map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('raiz')).render(<App />);
+</script>
+
+</body>
+</html>
