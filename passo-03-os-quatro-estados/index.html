@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Passo 3 — Os quatro estados</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 16px;
+           line-height: 1.5; color: #111; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { color: #666; margin-top: 0; }
+    .cenarios { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 6px; }
+    button { font-size: 14px; padding: 9px 14px; cursor: pointer; border: 1px solid #333;
+             background: #fff; color: #111; border-radius: 6px; }
+    button:hover { background: #f4f4f5; }
+    button.ativo { background: #111; color: #fff; }
+    .par { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    @media (max-width: 780px) { .par { grid-template-columns: 1fr; } }
+    .lado { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+    .lado.ruim { border-color: #f0b4b4; background: #fffafa; }
+    .lado.bom  { border-color: #b4dcc0; background: #fafffb; }
+    .rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+              font-weight: 700; margin-bottom: 10px; }
+    .ruim .rotulo { color: #b91c1c; }
+    .bom .rotulo  { color: #15803d; }
+    .tela { border: 1px dashed #bbb; border-radius: 6px; padding: 12px; min-height: 108px;
+            background: #fff; }
+    .tela h3 { margin: 0 0 6px; font-size: 15px; }
+    .estado-interno { margin-top: 10px; }
+    .estado-interno b { font-size: 11px; text-transform: uppercase; color: #666;
+                        letter-spacing: .05em; }
+    pre { background: #f4f4f5; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+          margin: 4px 0 0; white-space: pre-wrap; }
+    ul { margin: 4px 0 0; padding-left: 20px; font-size: 14px; }
+    .aviso-erro { color: #b91c1c; font-weight: 600; }
+    .aviso-vazio { color: #a16207; }
+    .carregando { color: #666; font-style: italic; }
+    .alerta { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px;
+              padding: 8px 10px; font-size: 13px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div id="raiz">Carregando o React...</div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState } = React;
+const BASE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
+
+const CENARIOS = [
+  { id:'ok',    texto:'1. Tudo certo',            url:`${BASE}/estados` },
+  { id:'vazio', texto:'2. UF que não existe',     url:`${BASE}/estados/ZZ/municipios` },
+  { id:'404',   texto:'3. Endereço errado',       url:`${BASE}/estadoss` },
+  { id:'rede',  texto:'4. Servidor inalcançável', url:'https://nao-existe-abc123.ibge.gov.br/x' },
+];
+
+// A mesma função cuidadosa do Passo 2. Ela relata a situação; a tela traduz.
+async function buscar(url, prazoMs = 8000) {
+  const controle = new AbortController();
+  const relogio = setTimeout(() => controle.abort(), prazoMs);
+  try {
+    const resposta = await fetch(url, { signal: controle.signal });
+    if (!resposta.ok) return { situacao: 'ERRO_HTTP', status: resposta.status };
+    const texto = await resposta.text();
+    if (texto.trim() === '') return { situacao: 'CORPO_VAZIO', status: resposta.status };
+    let dados;
+    try { dados = JSON.parse(texto); }
+    catch { return { situacao: 'NAO_E_JSON' }; }
+    if (Array.isArray(dados) && dados.length === 0) return { situacao: 'SEM_RESULTADO' };
+    return { situacao: 'OK', dados };
+  } catch (e) {
+    if (e.name === 'AbortError') return { situacao: 'DEMOROU_DEMAIS' };
+    return { situacao: 'FALHA_DE_REDE' };
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  JEITO A — três booleanos soltos.
+//  É o que sai naturalmente quando a gente vai escrevendo conforme
+//  precisa: "preciso saber se está carregando", "preciso guardar o
+//  erro", "preciso guardar os dados".
+//  O problema não é cada um deles. É que juntos eles permitem
+//  combinações que não deveriam existir.
+// ══════════════════════════════════════════════════════════════════
+function PainelBooleanos({ cenario }) {
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [dados, setDados] = useState(null);
+
+  React.useEffect(() => {
+    if (!cenario) return;
+    let vivo = true;
+    setCarregando(true);
+    // Repare no que NÃO acontece aqui: ninguém limpa `dados` nem `erro`.
+    // É o esquecimento mais comum do mundo, e ninguém percebe enquanto
+    // testa só o caminho feliz.
+    buscar(cenario.url).then(r => {
+      if (!vivo) return;
+      setCarregando(false);
+      if (r.situacao === 'OK') setDados(r.dados);
+      else setErro(r.situacao);
+    });
+    return () => { vivo = false; };
+  }, [cenario]);
+
+  const inconsistente = (dados && erro) || (carregando && (dados || erro));
+
+  return (
+    <div className="lado ruim">
+      <div className="rotulo">Jeito A — três booleanos</div>
+      <div className="tela">
+        {carregando && <p className="carregando">Carregando...</p>}
+        {erro && <p className="aviso-erro">Erro: {erro}</p>}
+        {dados && (
+          <>
+            <h3>{dados.length} resultados</h3>
+            <ul>{dados.slice(0, 3).map(d => <li key={d.id}>{d.nome}</li>)}</ul>
+          </>
+        )}
+      </div>
+      <div className="estado-interno">
+        <b>Estado interno</b>
+        <pre>{`carregando: ${carregando}\nerro: ${erro}\ndados: ${dados ? `lista de ${dados.length}` : 'null'}`}</pre>
+      </div>
+      {inconsistente && (
+        <div className="alerta">
+          <strong>Estado impossível na tela.</strong> Duas coisas que não podem ser verdade ao
+          mesmo tempo estão sendo mostradas juntas. O usuário está lendo dados que não
+          correspondem ao que acabou de acontecer.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  JEITO B — um estado só, com nome.
+//  A cada momento a busca está em EXATAMENTE UMA situação.
+//  Estado impossível deixa de ser um bug a evitar: vira algo que o
+//  código não consegue representar.
+// ══════════════════════════════════════════════════════════════════
+function PainelEstadoUnico({ cenario }) {
+  const [estado, setEstado] = useState({ nome: 'OCIOSO' });
+
+  React.useEffect(() => {
+    if (!cenario) return;
+    let vivo = true;
+    setEstado({ nome: 'CARREGANDO' });   // substitui tudo, não acumula
+    buscar(cenario.url).then(r => {
+      if (!vivo) return;
+      if (r.situacao === 'OK')                setEstado({ nome: 'COM_DADOS', dados: r.dados });
+      else if (r.situacao === 'SEM_RESULTADO') setEstado({ nome: 'VAZIO' });
+      else                                     setEstado({ nome: 'ERRO', motivo: r.situacao });
+    });
+    return () => { vivo = false; };
+  }, [cenario]);
+
+  return (
+    <div className="lado bom">
+      <div className="rotulo">Jeito B — um estado só</div>
+      <div className="tela">
+        {estado.nome === 'OCIOSO'     && <p className="carregando">Escolha um cenário acima.</p>}
+        {estado.nome === 'CARREGANDO' && <p className="carregando">Carregando...</p>}
+        {estado.nome === 'ERRO'       && <p className="aviso-erro">Não consegui buscar ({estado.motivo}).</p>}
+        {estado.nome === 'VAZIO'      && <p className="aviso-vazio">Nenhum resultado. Confira se o que você pediu existe.</p>}
+        {estado.nome === 'COM_DADOS'  && (
+          <>
+            <h3>{estado.dados.length} resultados</h3>
+            <ul>{estado.dados.slice(0, 3).map(d => <li key={d.id}>{d.nome}</li>)}</ul>
+          </>
+        )}
+      </div>
+      <div className="estado-interno">
+        <b>Estado interno</b>
+        <pre>{JSON.stringify({ ...estado, dados: estado.dados ? `lista de ${estado.dados.length}` : undefined }, null, 1)}</pre>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [cenario, setCenario] = useState(null);
+  return (
+    <>
+      <h1>Passo 3 — Os quatro estados</h1>
+      <p className="sub">
+        Clique em <strong>1. Tudo certo</strong> e depois em <strong>3. Endereço errado</strong>.
+        Nessa ordem. Olhe o lado esquerdo.
+      </p>
+      <div className="cenarios">
+        {CENARIOS.map(c => (
+          <button key={c.id}
+                  className={cenario?.id === c.id ? 'ativo' : ''}
+                  onClick={() => setCenario(c)}>
+            {c.texto}
+          </button>
+        ))}
+      </div>
+      <div className="par">
+        <PainelBooleanos cenario={cenario} />
+        <PainelEstadoUnico cenario={cenario} />
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('raiz')).render(<App />);
+</script>
+
+</body>
+</html>

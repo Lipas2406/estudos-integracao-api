@@ -72,8 +72,14 @@ lista curta; o resto chega, existe, e é invisível para você. Descobri escreve
 do passo 1 e corrigindo depois de rodar. A nota do erro ficou lá, à vista, porque ensina mais do que
 o texto certo teria ensinado.
 
+**Estado impossível que o modelo permite vai acontecer.** Guardar `carregando`, `erro` e `dados` em
+três variáveis soltas cria oito combinações, das quais só quatro descrevem uma situação real. O
+resultado é uma tela que mostra uma mensagem de erro e uma lista de resultados ao mesmo tempo — bug
+que ninguém digitou e que a modelagem permitiu. Uma situação por vez elimina a categoria inteira,
+em vez de corrigir um caso de cada vez.
+
 ---
 
 ## Estado
 
-Em construção, um passo por vez. Passos 1 e 2 prontos.
+Em construção, um passo por vez. Passos 1, 2 e 3 prontos.
