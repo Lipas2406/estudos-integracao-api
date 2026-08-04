@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Passo 1 — A requisição crua</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 16px;
+           line-height: 1.5; color: #111; }
+    h1 { font-size: 22px; }
+    button { font-size: 15px; padding: 10px 18px; cursor: pointer; border: 1px solid #333;
+             background: #111; color: #fff; border-radius: 6px; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    pre { background: #f4f4f5; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+    .caixa { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin: 16px 0; }
+    .rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #666;
+              font-weight: 700; margin-bottom: 6px; }
+    code { background: #f4f4f5; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<h1>Passo 1 — A requisição crua</h1>
+
+<p>
+  Sem framework, sem build, sem instalar nada. Abre este arquivo com dois cliques.
+  O objetivo é ver as <strong>três partes</strong> de uma resposta HTTP separadas:
+  o status, os cabeçalhos e o corpo.
+</p>
+
+<button id="btn">Buscar os estados no IBGE</button>
+
+<div class="caixa">
+  <div class="rotulo">1. Status</div>
+  <pre id="status">(ainda não pedi nada)</pre>
+</div>
+
+<div class="caixa">
+  <div class="rotulo">2. Cabeçalhos que o JavaScript consegue ver</div>
+  <pre id="cabecalhos">—</pre>
+  <p style="font-size:13px;color:#666;margin:8px 0 0">
+    Compare esta lista com a do DevTools (F12 &rarr; Network &rarr; clique na requisição).
+    Lá tem muito mais. O navegador <strong>esconde do código</strong> a maior parte dos cabeçalhos,
+    por segurança. Isso vira problema quando um dado importante chega em cabeçalho, e é assunto do
+    <code>LEIA.md</code>.
+  </p>
+</div>
+
+<div class="caixa">
+  <div class="rotulo">3. Corpo (o dado em si)</div>
+  <pre id="corpo">—</pre>
+</div>
+
+<script>
+const URL_IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades/estados';
+
+document.getElementById('btn').addEventListener('click', async () => {
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = 'Pedindo...';
+
+  // ── 1. A requisição. É só isto: pedir uma URL e esperar.
+  const resposta = await fetch(URL_IBGE);
+
+  // ── 2. O status vem ANTES do corpo. Já dá pra saber muita coisa aqui.
+  document.getElementById('status').textContent =
+    `status: ${resposta.status}\n` +
+    `resposta.ok: ${resposta.ok}   <- atalho do navegador: true quando o status é 2xx`;
+
+  // ── 3. Cabeçalhos: informação SOBRE a resposta, não a resposta.
+  const cabecalhos = [];
+  resposta.headers.forEach((valor, nome) => cabecalhos.push(`${nome}: ${valor}`));
+  document.getElementById('cabecalhos').textContent = cabecalhos.join('\n');
+
+  // ── 4. O corpo chega como TEXTO. Vira objeto só quando alguém converte.
+  //     Estou fazendo em duas etapas de propósito, pra ficar visível.
+  const textoCru = await resposta.text();
+  const objeto = JSON.parse(textoCru);
+
+  document.getElementById('corpo').textContent =
+    `tipo do que chegou: ${typeof textoCru}  (texto puro)\n` +
+    `tamanho em caracteres: ${textoCru.length}\n\n` +
+    `depois do JSON.parse virou: ${Array.isArray(objeto) ? 'uma lista' : typeof objeto}\n` +
+    `quantidade de itens: ${objeto.length}\n\n` +
+    `primeiro item:\n${JSON.stringify(objeto[0], null, 2)}`;
+
+  btn.disabled = false;
+  btn.textContent = 'Buscar de novo';
+});
+</script>
+
+</body>
+</html>
