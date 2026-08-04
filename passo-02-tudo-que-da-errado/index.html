@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Passo 2 — Tudo que dá errado</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 16px;
+           line-height: 1.5; color: #111; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { color: #666; margin-top: 0; }
+    .cenarios { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
+    button { font-size: 14px; padding: 9px 14px; cursor: pointer; border: 1px solid #333;
+             background: #fff; color: #111; border-radius: 6px; text-align: left; }
+    button:hover { background: #f4f4f5; }
+    button.ativo { background: #111; color: #fff; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .dica { font-size: 13px; color: #666; min-height: 20px; margin-bottom: 16px; }
+    .par { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 760px) { .par { grid-template-columns: 1fr; } }
+    .lado { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+    .lado.ruim { border-color: #f0b4b4; background: #fffafa; }
+    .lado.bom  { border-color: #b4dcc0; background: #fafffb; }
+    .rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+              font-weight: 700; margin-bottom: 8px; }
+    .ruim .rotulo { color: #b91c1c; }
+    .bom .rotulo  { color: #15803d; }
+    pre { background: #f4f4f5; padding: 10px; border-radius: 6px; overflow-x: auto;
+          font-size: 12.5px; white-space: pre-wrap; margin: 0; }
+    .tela { margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 14px;
+            border: 1px dashed #bbb; }
+    .tela b { display: block; font-size: 11px; text-transform: uppercase; color: #666;
+              letter-spacing: .05em; margin-bottom: 4px; font-weight: 700; }
+    code { background: #f4f4f5; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<h1>Passo 2 — Tudo que dá errado</h1>
+<p class="sub">
+  A mesma requisição, feita de dois jeitos. Clique nos cenários e compare o que cada um
+  <strong>mostra para o usuário</strong>.
+</p>
+
+<div class="cenarios" id="cenarios"></div>
+<div class="dica" id="dica">Escolha um cenário acima.</div>
+
+<div class="par">
+  <div class="lado ruim">
+    <div class="rotulo">Jeito ingênuo</div>
+    <pre id="cru-ingenuo">—</pre>
+    <div class="tela"><b>O que o usuário vê</b><span id="tela-ingenuo">—</span></div>
+  </div>
+  <div class="lado bom">
+    <div class="rotulo">Jeito cuidadoso</div>
+    <pre id="cru-cuidadoso">—</pre>
+    <div class="tela"><b>O que o usuário vê</b><span id="tela-cuidadoso">—</span></div>
+  </div>
+</div>
+
+<script>
+const BASE = 'https://servicodados.ibge.gov.br/api/v1/localidades';
+
+const CENARIOS = [
+  { id:'ok',      texto:'1. Tudo certo',            url:`${BASE}/estados`,
+    dica:'O caminho feliz. Os dois funcionam. É o único caso em que eles concordam.' },
+  { id:'vazio',   texto:'2. UF que não existe',     url:`${BASE}/estados/ZZ/municipios`,
+    dica:'O servidor responde 200 com uma lista vazia. Deu certo? A conversa sim. O pedido não.' },
+  { id:'404',     texto:'3. Endereço errado',       url:`${BASE}/estadoss`,
+    dica:'Status 404 e corpo com zero byte. Repare: o fetch NÃO rejeita nesse caso.' },
+  { id:'rede',    texto:'4. Servidor inalcançável', url:'https://nao-existe-abc123.ibge.gov.br/x',
+    dica:'A requisição nem sai. Aqui, sim, o fetch rejeita — e só aqui.' },
+  { id:'timeout', texto:'5. Demorou demais',        url:`${BASE}/estados`, prazo:1,
+    dica:'Prazo de 1ms, artificialmente curto para você ver acontecer. Sem prazo, o fetch espera para sempre.' },
+];
+
+// ─────────────────────────────────────────────────────────────
+//  JEITO INGÊNUO — o que a maioria dos tutoriais ensina.
+//  Três linhas, e mente em quase todos os cenários acima.
+// ─────────────────────────────────────────────────────────────
+async function buscarIngenuo(url) {
+  const resposta = await fetch(url);
+  const dados = await resposta.json();
+  return dados;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  JEITO CUIDADOSO — não retorna "os dados".
+//  Retorna QUAL DOS RESULTADOS POSSÍVEIS aconteceu, e o dado junto.
+//  Quem chama decide o que mostrar para cada caso.
+// ─────────────────────────────────────────────────────────────
+async function buscarCuidadoso(url, prazoMs = 8000) {
+  // O fetch não tem timeout nativo. Sem isto, ele espera indefinidamente.
+  const controle = new AbortController();
+  const relogio = setTimeout(() => controle.abort(), prazoMs);
+
+  try {
+    const resposta = await fetch(url, { signal: controle.signal });
+
+    // 1. Status de erro NÃO faz o fetch rejeitar. Tem que checar na mão.
+    if (!resposta.ok) {
+      return { situacao: 'ERRO_HTTP', status: resposta.status };
+    }
+
+    // 2. O corpo pode estar vazio mesmo com status bom.
+    const texto = await resposta.text();
+    if (texto.trim() === '') {
+      return { situacao: 'CORPO_VAZIO', status: resposta.status };
+    }
+
+    // 3. O corpo pode não ser JSON (uma página de erro em HTML, por exemplo).
+    let dados;
+    try {
+      dados = JSON.parse(texto);
+    } catch {
+      return { situacao: 'NAO_E_JSON', status: resposta.status, amostra: texto.slice(0, 60) };
+    }
+
+    // 4. Pode ser JSON válido e mesmo assim não ter resultado nenhum.
+    if (Array.isArray(dados) && dados.length === 0) {
+      return { situacao: 'SEM_RESULTADO', status: resposta.status };
+    }
+
+    return { situacao: 'OK', status: resposta.status, quantidade: dados.length, dados };
+
+  } catch (erro) {
+    // 5. Só cai aqui quando a requisição não aconteceu, ou foi cancelada.
+    if (erro.name === 'AbortError') return { situacao: 'DEMOROU_DEMAIS', prazoMs };
+    return { situacao: 'FALHA_DE_REDE', mensagem: erro.message };
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
+// ── Traduz cada situação para uma frase honesta na tela ──────
+function mensagemHonesta(r) {
+  switch (r.situacao) {
+    case 'OK':            return `${r.quantidade} resultados. Primeiro: ${r.dados[0].nome ?? '—'}`;
+    case 'SEM_RESULTADO': return 'Nenhum resultado para esse filtro. Confira se o que você pediu existe.';
+    case 'CORPO_VAZIO':   return `O servidor respondeu ${r.status} sem conteúdo. Não é a mesma coisa que "não achei".`;
+    case 'ERRO_HTTP':     return `O servidor recusou o pedido (${r.status}). O endereço pode estar errado.`;
+    case 'NAO_E_JSON':    return `Veio resposta em formato inesperado. Começa com: "${r.amostra}"`;
+    case 'DEMOROU_DEMAIS':return `Passou de ${r.prazoMs}ms sem responder. Tente de novo.`;
+    case 'FALHA_DE_REDE': return 'Não consegui falar com o servidor. Verifique a conexão.';
+    default:              return '???';
+  }
+}
+
+// ── Liga tudo ────────────────────────────────────────────────
+const elCenarios = document.getElementById('cenarios');
+CENARIOS.forEach(c => {
+  const b = document.createElement('button');
+  b.textContent = c.texto;
+  b.addEventListener('click', () => rodar(c, b));
+  elCenarios.appendChild(b);
+});
+
+async function rodar(cenario, botao) {
+  document.querySelectorAll('.cenarios button').forEach(b => {
+    b.classList.remove('ativo'); b.disabled = true;
+  });
+  botao.classList.add('ativo');
+  document.getElementById('dica').textContent = cenario.dica;
+  ['cru-ingenuo','tela-ingenuo','cru-cuidadoso','tela-cuidadoso']
+    .forEach(id => document.getElementById(id).textContent = '...');
+
+  // ── ingênuo ──
+  try {
+    const dados = await buscarIngenuo(cenario.url);
+    document.getElementById('cru-ingenuo').textContent =
+      `devolveu: ${Array.isArray(dados) ? `lista de ${dados.length}` : typeof dados}`;
+    document.getElementById('tela-ingenuo').textContent =
+      `${dados.length} resultados. Primeiro: ${dados[0]?.nome ?? 'undefined'}`;
+  } catch (e) {
+    document.getElementById('cru-ingenuo').textContent = `explodiu: ${e.name}\n${e.message}`;
+    document.getElementById('tela-ingenuo').textContent =
+      '(a tela quebrou ou ficou carregando para sempre — nada foi mostrado)';
+  }
+
+  // ── cuidadoso ──
+  const r = await buscarCuidadoso(cenario.url, cenario.prazo ?? 8000);
+  const { dados, ...semDados } = r;
+  document.getElementById('cru-cuidadoso').textContent = JSON.stringify(semDados, null, 1);
+  document.getElementById('tela-cuidadoso').textContent = mensagemHonesta(r);
+
+  document.querySelectorAll('.cenarios button').forEach(b => b.disabled = false);
+}
+</script>
+
+</body>
+</html>

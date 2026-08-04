@@ -52,11 +52,19 @@ de "terminei".
 
 ---
 
-## Duas coisas que já aprendi, e que motivaram o formato
+## Coisas que já aprendi, e que motivaram o formato
 
 **`200` não quer dizer que deu certo.** Pedir os municípios de uma UF que não existe devolve status
 `200` com uma lista vazia. Quem trata `200` como sucesso mostra "nenhum município encontrado" quando
 o erro real foi digitar a UF errada — a tela afirma uma coisa que os dados não sustentam.
+
+**O `fetch` não rejeita quando o status é de erro.** Ele só rejeita quando a requisição não
+aconteceu. Um `404` chega como resposta normal, e o `try/catch` sozinho não pega. Pior: se o corpo do
+erro vier vazio, quem chama `.json()` recebe um `SyntaxError` falando de JSON — uma mensagem que
+aponta para o sintoma e esconde a causa.
+
+**O `fetch` não tem prazo.** Sem `AbortController`, ele espera indefinidamente. Não ter prazo não é
+ser rápido: é não ter a capacidade de desistir.
 
 **O JavaScript não enxerga todos os cabeçalhos da resposta.** O navegador expõe ao código apenas uma
 lista curta; o resto chega, existe, e é invisível para você. Descobri escrevendo errado no material
@@ -67,4 +75,4 @@ o texto certo teria ensinado.
 
 ## Estado
 
-Em construção, um passo por vez. Passo 1 pronto.
+Em construção, um passo por vez. Passos 1 e 2 prontos.
